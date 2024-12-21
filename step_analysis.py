@@ -14,9 +14,8 @@ from pydantic import BaseModel, Field
 class StepAnalysis(BaseModel):
     step_text: str = Field(description="The step definition being analyzed")
     issues: List[str] = Field(description="List of identified issues")
-    suggestions: List[str] = Field(description="Improvement suggestions")
-    related_steps: List[str] = Field(description="Similar or related step definitions")
-    code_smells: List[str] = Field(description="Identified code smells or anti-patterns")
+    line_number: List[int] = Field(description="List of line numbers of identified issues. This should match with the number of issues")
+    suggestions: List[str] = Field(description="Improvement suggestions. This should match with the number of issues")
     confidence: float = Field(description="Confidence score of the analysis")
 
 

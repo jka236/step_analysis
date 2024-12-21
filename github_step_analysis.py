@@ -6,6 +6,7 @@ import base64
 import os
 from step_analysis import StepDefinitionAnalyzer
 from dotenv import load_dotenv
+import json
 
 class GithubStepAnalyzer:
     def __init__(self, github_token: str, repo_name: str, model: str = "gpt-4o-mini"):
@@ -37,10 +38,10 @@ class GithubStepAnalyzer:
                 
                 # Analyze only the changed step definitions
                 analysis = self.analyzer.analyze_step(
-                    target_step=changed_content,
+                    target_step=str(changed_content),
                     project_root=self._get_project_files(pr)
                 )
-                
+                # analysis = "test"
                 results.append({
                     "file": file.filename,
                     "analysis": analysis,
@@ -52,22 +53,40 @@ class GithubStepAnalyzer:
         
         return results
     
-    def _extract_changed_content(self, patch: str) -> str:
+    def _extract_changed_content(self, patch: str) -> List[Dict[str, any]]:
         """
-        Extract only the added or modified lines from the patch
+        Extract added or modified lines from the patch along with their line numbers
+        
+        Returns:
+            List of dictionaries containing line content and number
+            [{'content': 'line content', 'line_number': int}, ...]
         """
         if not patch:
-            return ""
+            return []
             
         changed_lines = []
+        current_line = 0
+        
         for line in patch.split('\n'):
-            # Only include added or modified lines (starting with '+')
-            # Exclude the diff metadata lines (starting with '+++')
-            if line.startswith('+') and not line.startswith('+++'):
-                # Remove the '+' prefix
-                changed_lines.append(line[1:])
-                
-        return '\n'.join(changed_lines)
+            if line.startswith('@@'):
+                # Parse the line number from the @@ -l,s +l,s @@ line
+                # Format is usually "@@ -l,s +l,s @@" where l is the starting line and s is the size
+                try:
+                    line_info = line.split('+')[1].split(',')[0]
+                    current_line = int(line_info) - 1  # -1 because we increment before using
+                except (IndexError, ValueError):
+                    continue
+            else:
+                current_line += 1
+                # Only include added or modified lines (starting with '+')
+                # Exclude the diff metadata lines (starting with '+++')
+                if line.startswith('+') and not line.startswith('+++'):
+                    changed_lines.append({
+                        'content': line[1:],  # Remove the '+' prefix
+                        'line_number': current_line
+                    })
+        
+        return changed_lines
 
     
     def _is_step_definition(self, filename: str) -> bool:
@@ -115,38 +134,27 @@ class GithubStepAnalyzer:
     
     def _post_analysis_comment(self, pr: PullRequest, file: File, analysis: Dict, changed_content: str) -> None:
         """Post analysis results as a PR comment"""
-        import json
-        
-        # Format comment
-        comment = f"""## Step Definition Analysis for `{file.filename}`
-
-### Analyzed Changes:
-```java
-{changed_content}
-```
-
+        analysis = json.loads(analysis)
+        for idx, _ in enumerate(analysis["issues"]):
+            # Format comment
+            comment = f"""
 ### Issues Found:
-{self._format_list(json.loads(analysis)['issues'])}
+{analysis['issues'][idx]}
 
 ### Suggestions:
-{self._format_list(json.loads(analysis)['suggestions'])}
-
-### Code Smells:
-{self._format_list(json.loads(analysis)['code_smells'])}
-
-Confidence Score: {json.loads(analysis)['confidence']}
+{analysis['suggestions'][idx]}
 """
 
-        # Get the latest commit in the PR
-        commit = list(pr.get_commits())[-1]
-        
-        # Create comment on the specific file
-        pr.create_review_comment(
-            body=comment,
-            commit=commit,
-            path=file.filename,
-            line=31  # You might want to be more specific about the line number
-        )
+            # Get the latest commit in the PR
+            commit = list(pr.get_commits())[-1]
+            
+            # Create comment on the specific file
+            pr.create_review_comment(
+                body=comment,
+                commit=commit,
+                path=file.filename,
+                line=analysis['line_number'][idx]
+            )
         
     @staticmethod
     def _format_list(items: List[str]) -> str:
