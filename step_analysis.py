@@ -1,6 +1,6 @@
 import json
 from typing import Dict, List
-from dataclasses import dataclass
+import os
 import glob
 from dotenv import load_dotenv
 
@@ -9,13 +9,25 @@ from langchain_openai import ChatOpenAI
 from langchain_core.output_parsers import StrOutputParser, PydanticOutputParser
 
 from pydantic import BaseModel, Field
-
+from langfuse.callback import CallbackHandler
+from examples import example_list
 
 class StepAnalysis(BaseModel):
     step_text: str = Field(description="The step definition being analyzed")
     issues: List[str] = Field(description="List of identified issues")
-    line_number: List[int] = Field(description="List of line numbers of identified issues. This should match with the number of issues")
+    line_number: List[int] = Field(
+        description="List of line numbers of identified issues. This should match with the number of issues"
+    )
     suggestions: List[str] = Field(description="Improvement suggestions. This should match with the number of issues")
+    # Add a reason why this is bogus code
+    # Test real input from SAP
+    # Add the compatibility with feature file
+    # Add not obvious test cases
+    
+    # SAP BTP Gen AI toolkit
+    # Get env and BTP admin authority
+    # Compliance Dashboard coupling with the code (Talk with SW)
+    
     confidence: float = Field(description="Confidence score of the analysis")
 
 
@@ -67,9 +79,22 @@ class StepDefinitionAnalyzer:
         self.parser = PydanticOutputParser(pydantic_object=StepAnalysis)
         self.analysis_chain = self._create_analysis_chain()
 
+    def _load_and_parse_examples(self, file_name="bogus_example.json") -> str:
+
+        with open(file_name, "r") as file:
+            examples = json.load(file)
+
+        examples_text = "\n\n".join(
+            f"Example {i + 1}:\nCode:\n{entry['code']}\nLabel: {entry['label']}\nIssue: {entry['annotation']['issue']}\n"
+            f"Explanation: {entry['annotation']['explanation']}\nSuggestion: {entry['annotation']['suggestion']}"
+            for i, entry in enumerate(examples)
+        )
+
+        return examples_text
+
     def _create_analysis_chain(self) -> PromptTemplate:
         template = """
-        Analyze this specific step definition in the context of the entire test suite to detect BOGUS tests.
+        You are a code quality expert. Analyze this specific step definition in the context of the entire test suite to detect BOGUS tests.
         Please only report important warning.
 
         A bogus test could include the following characteristics:
@@ -109,41 +134,55 @@ class StepDefinitionAnalyzer:
         Context - Other Step Definitions:
         {step_context}
 
+        example bogus code:
+        {examples}
+        
         Return your analysis in the following JSON format:
         {format_instructions}
         """
 
         return PromptTemplate(
-            input_variables=["target_step", "feature_context", "step_context"],
+            input_variables=["target_step", "feature_context", "step_context", "examples"],
             template=template,
             partial_variables={"format_instructions": self.parser.get_format_instructions()},
-            output_parser=self.parser
+            output_parser=self.parser,
         )
 
-    def analyze_step(self, target_step: str, project_root: str) -> Dict:
+    def analyze_step(self, target_step: str, project_root: str, langfuse_handler=None) -> Dict:
         """
         Analyze a specific step definition using the entire codebase as context
         """
+        config = {"callbacks": [langfuse_handler]} if langfuse_handler else {}
+        
         # Collect context
         collector = ContextCollector(project_root)
         features = collector.collect_features()
         step_defs = collector.collect_step_definitions()
+        examples = self._load_and_parse_examples()
         inputs = {
-            "target_step" : target_step, 
-            "feature_context" : "\n\n".join(features), 
-            "step_context" : "\n\n".join(step_defs), 
+            "target_step": target_step,
+            "feature_context": "\n\n".join(features),
+            "step_context": "\n\n".join(step_defs),
+            "examples": examples,
         }
         # Run analysis
         chain = self.analysis_chain | self.llm | StrOutputParser()
-        result = chain.invoke(inputs)
+        result = chain.invoke(inputs, config=config)
 
         # Parse and return results
-        return self.parser.parse(result).model_dump_json(indent = 2)
+        return self.parser.parse(result).model_dump_json(indent=2)
 
 
-# Example usage
+def test_multiple_cases(langfuse_handler):
+    analyzer = StepDefinitionAnalyzer()
+    for example in example_list:
+        result = analyzer.analyze_step(target_step=example, project_root="./bogusdetector", langfuse_handler=langfuse_handler)
+        
 def main():
     load_dotenv()
+    langfuse_handler = CallbackHandler(
+        public_key=os.getenv("PUBLIC_KEY"), secret_key=os.getenv("SECRET_KEY"), host=os.getenv("HOST")
+    )
 
     # Example step definition to analyze
     target_step = """
@@ -153,12 +192,10 @@ def main():
     """
 
     analyzer = StepDefinitionAnalyzer()
-    result = analyzer.analyze_step(target_step=target_step, project_root="./bogusdetector")
+    result = analyzer.analyze_step(target_step=target_step, project_root="./bogusdetector", langfuse_handler=langfuse_handler)
 
     print(result)
 
 
 if __name__ == "__main__":
     main()
-
-

@@ -1,0 +1,66 @@
+[
+    {
+      "code": "public void exampleMethod() {\n    int a = 10;\n    System.out.println(\"The value is: \" + a);\n}",
+      "label": "Bogus",
+      "annotation": {
+        "issue": "Hardcoded value.",
+        "explanation": "The variable 'a' is hardcoded with the value '10', which reduces flexibility.",
+        "suggestion": "Use a configurable parameter or input argument for 'a'."
+      }
+    },
+    {
+      "code": "public void unimplementedMethod() {\n    // TODO: Implement this method\n}",
+      "label": "Bogus",
+      "annotation": {
+        "issue": "Unimplemented method.",
+        "explanation": "The method is declared but not implemented, leading to runtime errors if called.",
+        "suggestion": "Provide a proper implementation for the method or remove it if unnecessary."
+      }
+    },
+    {
+      "code": "public void duplicateMethod() {\n    System.out.println(\"This is a duplicate method.\");\n}\n\npublic void duplicateMethod() {\n    System.out.println(\"This is another duplicate method.\");\n}",
+      "label": "Bogus",
+      "annotation": {
+        "issue": "Duplicate method definitions.",
+        "explanation": "Two methods with the same name cause a compilation error.",
+        "suggestion": "Ensure method names are unique or use method overloading with distinct parameters."
+      }
+    },
+    {
+      "code": "public void incorrectLogic() {\n    if (x = 10) {\n        System.out.println(\"x is 10\");\n    }\n}",
+      "label": "Bogus",
+      "annotation": {
+        "issue": "Assignment instead of comparison.",
+        "explanation": "The condition 'x = 10' assigns the value instead of comparing it, leading to incorrect logic.",
+        "suggestion": "Use '==' for comparison instead of '='."
+      }
+    },
+    {
+      "code": "public void exceptionSwallowing() {\n    try {\n        riskyOperation();\n    } catch (Exception e) {\n        // Do nothing\n    }\n}",
+      "label": "Bogus",
+      "annotation": {
+        "issue": "Exception swallowing.",
+        "explanation": "The catch block swallows the exception without any handling, making debugging difficult.",
+        "suggestion": "Log the exception or handle it appropriately to ensure visibility and traceability."
+      }
+    },
+    {
+      "code": "public void hardCodedCredentials() {\n    String username = \"admin\";\n    String password = \"password123\";\n    authenticate(username, password);\n}",
+      "label": "Bogus",
+      "annotation": {
+        "issue": "Hardcoded credentials.",
+        "explanation": "Storing sensitive information like credentials in code is a security risk.",
+        "suggestion": "Store credentials securely using environment variables or a secrets manager."
+      }
+    },
+    {
+      "code": "public void ambiguousStepDefinition() {\n    @Given(\"I log in as a user\")\n    public void logInAsUser() {\n        System.out.println(\"Logging in\");\n    }\n\n    @Given(\"I log in as a user\")\n    public void duplicateLogInAsUser() {\n        System.out.println(\"Another login implementation\");\n    }\n}",
+      "label": "Bogus",
+      "annotation": {
+        "issue": "Ambiguous step definitions.",
+        "explanation": "Two identical step definitions create ambiguity in Cucumber tests.",
+        "suggestion": "Ensure each step definition is unique to avoid ambiguity."
+      }
+    }
+  ]
+  
